@@ -10,106 +10,146 @@ from py import filelist
 from py import install_sricpt
 from py import create_controlxml
 from py import debinfo
+from multiprocessing import cpu_count
 
 ###########################################################################
 ##  config parameter
 '''
     dir--文件夹名   filepath--文件绝对路径    dirpath--文件夹绝对路径
     /$basedirpath
-    ----/$softname($extractdebdirpath)
-    --------/usr
-    ------------/share
-    ----------------/applications
-    ----------------/icons
-    ------------/bin
-    ------------/lib
-    ------------/game(optional)
-    ------------/pixmaps(optional)
-    --------/opt
-    ------------/$softname($bindirpath)
-    ----------------/bin
-    --------------------/$execpath
-    ----------------/lib
-    --------/DEBIAN
-    --------/CPK($cpkdirpath)
-    ------------/icons
-    ------------/screenshots
+    ----/$makecpkgdirpath
     ----/debfile
     ----/cpkfile
+    ----/$debdir
+    --------/DEBIAN
+    --------/opt
+    /opt
+    ----/$softname
+    --------/bin
+    --------/lib
+    --------/share
+    /usr
+    ----/share
 '''
 #######保存脚本当前执行步骤
 step = 0
-basedirpath = "/home/yuanxm/packsource/goldendict"
-debfilepath = ''
-extractdebdirpath = ''
-bindirpath = ''
 softname = ''
 softversion = ''
 softarch = ''
+basedirpath = "/home/yuanxm/packsource/"
+debfilepath = ''
+sourcedirpath = ''
+makecpkgdirpath = ''
+bindirpath = ''
 execpath = ''
 thisfile = ""
+prefixbase = '/opt'
+prefix = ''
 passwd = 'qwer1234'
 parameters = {}
 controlinfo = {}
 
+cpu_count = cpu_count()
+
 
 def printhelp():
     h = '''
-    -h|--h|help for this help manual
-    debfilepath or basedirpath + softname either is needed
-    & tired to continue
-    after all , only myself use this script
+    "- and -- both will be ok for this"
+
+    -builddep       ---apt-get build-dep
+    -configure      ---configure
+    -make           ---make
+    -install        ---make install
+    -copydep        ---deplist copy
+    -copydir        ---copy to workdir
+    -desktop        ---modify desktop
+    -control        ---modify control
+    -pack           ---dpkg -b
+    -copydeb        ---copy deb to dest
+    -all            ---do all above
+    -h | help       ---showthis
     '''
     print(h)
+    print("     softname     :   %s" % softname)
+    print("     softversion  :   %s" % softversion)
+    print("     softarch         :   %s" % softarch)
+    print("     sourcefold   :   %s" % makecpkgdirpath)
+    print("     workbase   :   %s" % basedirpath)
 
 
-def movebinandlib():
-    global extractdebdirpath, softname, bindirpath
-    if not os.path.exists(extractdebdirpath): return
-    if os.path.exists(os.path.join(extractdebdirpath, 'usr')):
-        mkdir(os.path.join(extractdebdirpath, 'opt'))
-        optpath = mkdir(os.path.join(extractdebdirpath, 'opt', softname))
-        tomove = ['bin', 'game']  # to be considered whether lib should be moved
-        subs = getsubfiles(os.path.join(extractdebdirpath, 'usr'))
-        for sub in subs:
-            if sub in tomove:
-                try:
-                    move(os.path.join(extractdebdirpath, 'usr', sub), optpath)
-                except:
-                    pass
-                bindirpath = os.path.join(optpath, sub)
-    return bindirpath
+def configure(sourcedirpath=sourcedirpath):
+    if os.path.exists(os.path.join(sourcedirpath, 'configure')):
+        param = " --prefix=/opt/" + softname + "-" + softversion
+        param += " LDFLAGS=-Wl,-rpath='\$\$ORIGIN/../lib'"
+        cmd = "cd " + sourcedirpath + "; ./configure " + param
+        return subprocess.call(cmd, shell=True)
+    elif os.path.exists(os.path.join(sourcedirpath, 'CMakeLists.txt')):
+        param = "-DCMAKE_INSTALL_PREFIX=%s " % prefix
+        param += " -DCMAKE_INSTALL_RPATH=\"'\$ORIGIN/../lib'\""
+        cmd = "cd %s; cmake . %s " % (sourcedirpath, param)
+        return subprocess.call(cmd, shell=True)
+    elif os.path.exists(os.path.join(sourcedirpath, 'SConstruct')):
+        print('***************************************************')
+        print('** SCON PROJECT')
+        return -1
+    elif os.path.exists(os.path.join(sourcedirpath, softname + '.pro')):
+        print('***************************************************')
+        print('** QMAKE PROJECT')
+        return -1
+    else:
+        return -1
+
+
+def make(sourcedirpath=sourcedirpath, param=''):
+    if os.path.exists(os.path.join(sourcedirpath, 'makefile')) or os.path.exists(
+            os.path.join(sourcedirpath, 'Makefile')) or os.path.exists(os.path.join(sourcedirpath, 'GNUmakefile')):
+        cmd = "cd " + sourcedirpath + "; make -j" + str(cpu_count) + param
+        return subprocess.call(cmd, shell=True)
+    return -1
+
+def install(sourcedirpath=sourcedirpath):
+    if os.path.exists(os.path.join(sourcedirpath, 'makefile')) or os.path.exists(
+            os.path.join(sourcedirpath, 'Makefile')) or os.path.exists(os.path.join(sourcedirpath, 'GNUmakefile')):
+        cmd = "cd " + sourcedirpath + "; echo " + passwd + " | sudo -S make install"
+        return subprocess.call(cmd, shell=True)
+    return -1
 
 def build_deps(softname):
     cmd = "echo %s | sudo -S apt-get build-dep %s -y" % (passwd, softname)
     return subprocess.call(cmd, shell=True)
 
+
+
+def movebinandlib():
+    global makecpkgdirpath, softname, bindirpath
+    if not os.path.exists(makecpkgdirpath): return
+    if os.path.exists(os.path.join(makecpkgdirpath, 'usr')):
+        mkdir(os.path.join(makecpkgdirpath, 'opt'))
+        optpath = mkdir(os.path.join(makecpkgdirpath, 'opt', softname))
+        tomove = ['bin', 'game']  # to be considered whether lib should be moved
+        subs = getsubfiles(os.path.join(makecpkgdirpath, 'usr'))
+        for sub in subs:
+            if sub in tomove:
+                try:
+                    move(os.path.join(makecpkgdirpath, 'usr', sub), optpath)
+                except:
+                    pass
+                bindirpath = os.path.join(optpath, sub)
+    return bindirpath
+
+
+
+
 def modifyexecfiles():
-    global bindirpath, extractdebdirpath, softname
+    global bindirpath, makecpkgdirpath, softname
     files = getsubfiles(bindirpath, 'file')
     retlibs = []
     for file in files:
         if modifyexecrpath(os.path.join(bindirpath, file)):
             retlibs = ldd(os.path.join(bindirpath, file), retlibs)
     if len(retlibs) > 0:
-        optlibpath = mkdir(os.path.join(extractdebdirpath, 'opt', softname, 'lib'))
+        optlibpath = mkdir(os.path.join(makecpkgdirpath, 'opt', softname, 'lib'))
         copylibs(retlibs, optlibpath)
-
-
-def modifyexecrpath(execfilepath):
-    if not os.path.exists(execfilepath): return False
-    param = "--set-rpath"
-    rpath = "'$ORIGIN/../lib'"
-    cmd = "patchelf %s %s %s" % (param, rpath, execfilepath)
-    rst = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    res_str = rst.stderr.read().decode().strip()
-    if res_str is "":
-        return True
-    elif res_str == "not an ELF executable":
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        print("!!!%s says %s" % (os.path.basename(execfilepath), res_str))
-        return False
-    return False
 
 
 def ldd(execfilepath, retlibs=[]):
@@ -117,7 +157,7 @@ def ldd(execfilepath, retlibs=[]):
     cmd = 'ldd %s' % execfilepath
     rst = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
     restr = rst.stdout.readlines()
-    print("%s has relate lib %d"%(execfilepath,len(restr)))
+    print("%s has relate lib %d" % (execfilepath, len(restr)))
     for line in restr:
         line = line.decode().strip()
         t = re.match('^(.*?)=>(.*?)\(\w*?\)$', line)
@@ -145,7 +185,7 @@ def ldd(execfilepath, retlibs=[]):
                 if t:
                     libname, libpath = '', t.group(1).strip()
                 else:
-                    print('!!!%s not match'%line)
+                    print('!!!%s not match' % line)
         if (libname, libpath != '', '') and ((libname, libpath) not in retlibs):
             retlibs.append((libname, libpath))
 
@@ -260,6 +300,7 @@ def getdebinfo(debs):
 
     return controlinfo
 
+
 def parsername(path):
     filename = os.path.basename(path)
     re_str = r'^([\w,-]+?)_([0-9,\.]+?)[+,-].*?_(\w+?).deb'
@@ -342,34 +383,15 @@ def desktopinfo(deskpath):
 # 结合control和desktop里的信息，用于生成control.xml
 def combineinfo(debs):
     controlinfo = getdebinfo(debs)
-    global softversion,softarch
-    softversion = controlinfo.get('version','0') if softversion == '' else softversion
-    softarch = controlinfo.get('arch','amd64') if softarch == '' else softarch
-    if not os.path.exists(os.path.join(extractdebdirpath, 'usr', 'share', 'applications')): return controlinfo
-    desktopfilepath = getdistinctpath(os.path.join(extractdebdirpath, 'usr', 'share', 'applications'), 'file')
+    global softversion, softarch
+    softversion = controlinfo.get('version', '0') if softversion == '' else softversion
+    softarch = controlinfo.get('arch', 'amd64') if softarch == '' else softarch
+    if not os.path.exists(os.path.join(makecpkgdirpath, 'usr', 'share', 'applications')): return controlinfo
+    desktopfilepath = getdistinctpath(os.path.join(makecpkgdirpath, 'usr', 'share', 'applications'), 'file')
     deskinfo = desktopinfo(desktopfilepath)
     for k, v in deskinfo.items():
         controlinfo[k] = v
     return controlinfo
-
-
-def extractdeb(debpath):
-    '''
-    解压deb包到包目录下包名文件夹
-    :param debpath: deb包文件的绝对路径
-    :return: 解压后的文件夹
-    '''
-
-    mkdir(extractdebdirpath)
-    dpkg_x(debpath, extractdebdirpath)
-    dpkg_r(debpath, extractdebdirpath)
-    return extractdebdirpath
-
-
-# 解压所有deb包
-def extractall(debs):
-    for deb in debs:
-        extractdeb(deb)
 
 
 def mkdir(path):
@@ -404,7 +426,7 @@ def dpkg_r(debpath, destpath):
 
 # 得到需要转的deb包列表，可能不只有一个
 def obtaindebs():
-    global debfilepath, basedirpath, softname, extractdebdirpath
+    global debfilepath, basedirpath, softname, makecpkgdirpath
     if debfilepath != '':
         if basedirpath == '':
             basedirpath = os.path.dirname(debfilepath)
@@ -437,7 +459,7 @@ def obtaindebs():
             for file in files:
                 if file.startswith(softname):
                     debs.append(os.path.join(basedirpath, file))
-    extractdebdirpath = os.path.join(basedirpath, softname)
+    makecpkgdirpath = os.path.join(basedirpath, softname)
     return debs
 
 
@@ -559,19 +581,14 @@ def createcpk(workdir, dest):
 
 
 def go():
-    global extractdebdirpath, step
+    global makecpkgdirpath, step
     debs = obtaindebs()
     combineinfo(debs)
 
     if step <= 0:
-        # 第一步：解包
+        # 第一步：configure
         try:
-            extractall(debs)
-            desktopfilepath = getdistinctpath(os.path.join(extractdebdirpath, 'usr', 'share', 'applications'), 'file')
-            deskinfo = desktopinfo(desktopfilepath)
-            for k, v in deskinfo.items():
-                controlinfo[k] = v
-
+            configure()
         except Exception as e:
             print(e)
             parameters['step'] = step
@@ -594,15 +611,15 @@ def go():
     if step <= 2:
         # 第三步: 改变desktop文件中执行文件路径然后拷贝48x48图标文件路径和desktop文件到CPK
         try:
-            cpkdirpath = mkdir(os.path.join(extractdebdirpath, 'CPK'))
-            icondirpath = mkdir(os.path.join(extractdebdirpath, 'CPK', 'icons'))
-            mkdir(os.path.join(extractdebdirpath, 'CPK', 'screenshot'))
+            cpkdirpath = mkdir(os.path.join(makecpkgdirpath, 'CPK'))
+            icondirpath = mkdir(os.path.join(makecpkgdirpath, 'CPK', 'icons'))
+            mkdir(os.path.join(makecpkgdirpath, 'CPK', 'screenshot'))
             execpath = getdistinctpath(bindirpath)
             execpath = execpath[execpath.find('/opt'):]
             parameters['execpath'] = controlinfo['execpath'] = execpath
-            editdesktop(extractdebdirpath, execpath)
-            desktopfilepath = getdistinctpath(os.path.join(extractdebdirpath, 'usr', 'share', 'applications'))
-            copy(get48x48iconpath(extractdebdirpath), icondirpath)
+            editdesktop(makecpkgdirpath, execpath)
+            desktopfilepath = getdistinctpath(os.path.join(makecpkgdirpath, 'usr', 'share', 'applications'))
+            copy(get48x48iconpath(makecpkgdirpath), icondirpath)
             copy(desktopfilepath, cpkdirpath)
         except Exception as e:
             print(e)
@@ -614,10 +631,10 @@ def go():
     if step <= 3:
         # 第四步:生成filelist,.install和control.xml
         try:
-            filelist.gen_filelist(extractdebdirpath)
-            install_sricpt.install_generation(extractdebdirpath, softname)
+            filelist.gen_filelist(makecpkgdirpath)
+            install_sricpt.install_generation(makecpkgdirpath, softname)
             controlinfo['install'] = softname + ".install"
-            controlsavepath = os.path.join(extractdebdirpath, 'CPK', 'control.xml')
+            controlsavepath = os.path.join(makecpkgdirpath, 'CPK', 'control.xml')
             create_controlxml.createcontrol(controlsavepath, controlinfo)
         except Exception as e:
             print(e)
@@ -629,7 +646,7 @@ def go():
     if step <= 4:
         # 第五步:生成cpk文件
         try:
-            createcpk(extractdebdirpath, os.path.join(basedirpath, '%s-%s_%s.cpk' % (softname, softversion, softarch)))
+            createcpk(makecpkgdirpath, os.path.join(basedirpath, '%s-%s_%s.cpk' % (softname, softversion, softarch)))
         except Exception as e:
             print(e)
             parameters['step'] = step
@@ -639,7 +656,7 @@ def go():
             step += 1
     if step > 5:
         try:
-            shutil.rmtree(extractdebdirpath)
+            shutil.rmtree(makecpkgdirpath)
         except Exception as e:
             print(e)
             parameters['step'] = step

@@ -39,9 +39,9 @@ config = configparser.ConfigParser()
 passwd = "qwer1234"
 sourcebase = "/home/yuanxm/packsource"
 installbase = "/opt"
-sourcefold = "goldendict-1.5.0~git20150923"
-softname = "goldendict"
-softversion = "1.5.0"
+sourcefold = ""
+softname = ""
+softversion = ""
 arch = "amd64"
 destdir = sourcebase + "/deb"
 ####################################################################################
@@ -119,7 +119,7 @@ def install(path):
     return -1
 
 def builddep():
-    cmd = "echo %s | sudo -S apt-get build-dep %s "%(passwd, softname)
+    cmd = "echo %s | sudo -S apt-get build-dep %s -y"%(passwd, softname)
     return subprocess.call(cmd,shell=True)
 
 def deplist(path):
