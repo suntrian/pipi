@@ -11,19 +11,23 @@ def getContent(file):
         s = p.findall(c)
         print(len(s))
         l = list()
+        keys = set()
         for i in s:
             m = dict()
             rr = r'(.*?):\s?(.*)\n'
             ss = re.findall(rr, i)
             for si in ss:
                 m[si[0]] = si[1]
+                keys.add(si[0])
             # l.append([m['Package'], m['Version']])        # 加入包名和版本号
-            l.append(m['Maintainer'] + "\n")
+            # l.append(m['Maintainer'] + "\n")
 
             # ff.write('Package' + ':' + m['Package'] + '\n')
             # ff.write('Version' + ':' + m['Version'] + '\n')
             # ff.write('Filename' + ':' + m['Filename'] + '\n')
             # ff.write('\n')
+        print(keys)
+
         return l
 
     except Exception:
@@ -54,5 +58,5 @@ if __name__ == "__main__":
     # compare(l1,l2)
 
     l1 = getContent(u1)
-    with open('/home/yuanxm/PycharmProjects/package_maintainer.txt','w') as f:
-        f.writelines(l1)
+    # with open('/home/yuanxm/PycharmProjects/package_maintainer.txt','w') as f:
+    #     f.writelines(l1)

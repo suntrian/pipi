@@ -199,8 +199,8 @@ def construct(softname,softid="",type="desktop",genericname_en="",genericname_zh
     pkgs_source.appendChild(doc.createTextNode(source))
 
     if not savepath=="":
-        xfile = open(savepath, "w")
-        xfile.write(doc.toprettyxml(encoding="GB2312", indent="  ").decode('utf-8','ignore'))
+        xfile = open(savepath, "wb")
+        xfile.write(doc.toprettyxml(encoding="GB2312", indent="  "))
         xfile.close()
 
     return doc
