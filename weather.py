@@ -2,6 +2,16 @@
 
 # encoding:utf-8
 
+'''
+    心知天气api
+    doc_url:http://www.thinkpage.cn/doc#sign
+
+    新浪天气api
+    api：http://php.weather.sina.com.cn/iframe/index/w_cl.php?code=js&day=0&city=&dfc=1&charset=utf-8
+
+'''
+
+
 import time
 import hashlib
 import hmac
@@ -34,7 +44,7 @@ def get_nomal_url():
 
 def get_weather(url):
     data = requests.get(url).json()
-
+    return data
 
 if __name__ == "__main__":
-    print(get_nomal_url())
+    print(str(get_weather(get_nomal_url())))
